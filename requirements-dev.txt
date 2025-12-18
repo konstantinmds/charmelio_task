@@ -1,0 +1,3 @@
+# Install package with all dependencies including dev/test dependencies
+# Use this for local development only, NOT for Docker
+-e .[dev]

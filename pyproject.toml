@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "charmelio"
+version = "0.1.0"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "sqlalchemy>=2.0",
+    "psycopg2-binary",
+    "asyncpg",
+    "alembic",
+    "pydantic>=2.0",
+    "pydantic-settings",
+    "openai>=1.0.0",
+    "pdfplumber>=0.10.0",
+    "temporalio>=1.6.0",
+    "minio>=7.1.0,<7.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "pytest-mock",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "worker*"]
+
+[tool.pytest.ini_options]
+addopts = "-q --cov=app --cov-branch --cov-report=term-missing --cov-report=html"
+testpaths = ["tests"]
+markers = [
+    "integration: tests requiring Temporal/MinIO services",
+]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = ["**/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # unused imports in __init__.py
+"tests/**" = ["B", "F401", "F811"]  # test files can be more relaxed
