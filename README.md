@@ -82,9 +82,3 @@ Each step: commit → run `make test` → inspect `htmlcov/` → PR.
 * **pytest** + **pytest-cov** with **coverage fail-under = 95%** (HTML).
 * **pytest-asyncio** for async activity tests, **pytest-docker** (optional) for spinning up Temporal/MinIO.
 * **unittest.mock** /**pytest-mock** to isolate OpenAI + MinIO.
-
-### Parallelizable (if 2+ engineers)
-
-* Eng A: T-03, T-04, T-05, T-07
-* Eng B: T-06, T-09, T-10, T-11, T-12
-* Pair: T-08, T-13, T-14, T-15
