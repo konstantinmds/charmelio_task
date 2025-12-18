@@ -1,0 +1,165 @@
+name: pipeline-review
+version: 1
+summary: "Automated review for data pipeline changes (crawling, parsing, retrieval)"
+
+triggers:
+  pull_request:
+    on: [opened, synchronize, labeled]
+    label: pipeline-review
+  slash_command:
+    command: /pipeline-review
+    description: "Run an automated pipeline quality review on current diff"
+  manual:
+    command: "claude workflows run .claude/workflows/pipeline-review.yaml"
+
+inputs:
+  diff_target:
+    description: "Git ref to compare against"
+    default: "origin/main"
+  test_queries:
+    description: "Optional BiH test queries to validate retrieval"
+    default: []
+  check_migrations:
+    description: "Whether to validate PostgreSQL schema migrations"
+    default: true
+
+phases:
+  - name: gather-context
+    description: "Collect git diff, changed files, and BiH domain knowledge"
+    steps:
+      - run: git diff --stat ${diff_target}
+        output: diff_stat
+      - run: git diff ${diff_target}
+        output: diff_patch
+      - load_file: README.md
+      - load_file: .claude/memory/bih-domain-knowledge.md
+
+  - name: static-analysis
+    description: "Lint Python code and validate schemas"
+    steps:
+      - run: docker compose exec api ruff check bhkb-api/ || true
+        if: bhkb-api/ directory exists
+        output: ruff_output
+      - run: docker compose exec api mypy bhkb-api/ || true
+        if: bhkb-api/ directory exists
+        output: mypy_output
+      - analyze:
+          agent: data-pipeline-reviewer
+          prompt: |
+            Review the diff for:
+            - BiH legal marker parsing (Član|Čl.|Članak, effective date phrases)
+            - Jurisdiction detection (BiH/FBiH/RS/BD)
+            - Temporal validity logic (effective_from/to)
+            - Pydantic schema correctness
+            - Temporal workflow error handling
+            Reference the BiH domain knowledge file.
+        inputs:
+          diff: ${diff_patch}
+          linting: ${ruff_output}
+          typing: ${mypy_output}
+
+  - name: schema-migration-check
+    description: "Validate PostgreSQL migrations and Elasticsearch mappings"
+    if: ${check_migrations}
+    steps:
+      - run: |
+          # Check for new migration files
+          git diff ${diff_target} --name-only | grep -E 'migrations/.*\.sql|alembic/versions/.*\.py'
+        output: migration_files
+      - analyze:
+          agent: data-pipeline-reviewer
+          prompt: |
+            Review database migrations for:
+            - Proper indexes (pgvector ivfflat, temporal filters, jurisdiction/topic lookups)
+            - Constraints (effective_from/to logic, jurisdiction codes)
+            - Backward compatibility
+            - Data migration safety
+        inputs:
+          migrations: ${migration_files}
+          diff: ${diff_patch}
+
+  - name: parsing-quality-check
+    description: "Validate document parsing and metadata extraction"
+    steps:
+      - run: |
+          # Run parsing tests if they exist
+          docker compose exec api pytest bhkb-api/tests/parsing/ -v || true
+        output: parsing_tests
+      - analyze:
+          agent: data-pipeline-reviewer
+          prompt: |
+            Evaluate parsing quality:
+            - PDF/HTML/DOCX conversion correctness
+            - Clause splitting (BiH article patterns)
+            - OCR confidence tracking
+            - Metadata extraction (jurisdiction, topic, dates)
+            - Cyrillic + Latin script handling
+        inputs:
+          test_results: ${parsing_tests}
+          diff: ${diff_patch}
+
+  - name: retrieval-pipeline-check
+    description: "Validate hybrid search and RAG quality"
+    steps:
+      - run: |
+          # Run retrieval tests if they exist
+          docker compose exec api pytest bhkb-api/tests/retrieval/ -v || true
+        output: retrieval_tests
+      - analyze:
+          agent: data-pipeline-reviewer
+          prompt: |
+            Evaluate retrieval pipeline:
+            - Hybrid search (pgvector + Elasticsearch) correctness
+            - RRF/MMR fusion logic
+            - Reranking application (top 50 → top 12)
+            - Citation integrity (URL, article, jurisdiction, dates)
+            - Temporal filters applied
+            - Answer guardrails (no hallucination)
+        inputs:
+          test_results: ${retrieval_tests}
+          diff: ${diff_patch}
+
+  - name: temporal-workflow-review
+    description: "Review Temporal workflow changes for robustness"
+    steps:
+      - run: |
+          # Check for Temporal workflow changes
+          git diff ${diff_target} --name-only | grep -E 'workflows/.*\.py|activities/.*\.py'
+        output: workflow_files
+      - analyze:
+          agent: data-pipeline-reviewer
+          prompt: |
+            Review Temporal workflows for:
+            - Proper activity retry policies
+            - Backoff/timeout handling
+            - Signal/query definitions
+            - Workflow versioning
+            - Error handling and dead letter queue usage
+        inputs:
+          workflows: ${workflow_files}
+          diff: ${diff_patch}
+
+outputs:
+  report:
+    template: |
+      ## Automated Pipeline Review
+      **Diff Target:** ${diff_target}
+
+      ### 1. Parsing & Text Extraction
+      ${phase.parsing-quality-check.analysis}
+
+      ### 2. Metadata & Classification
+      ${phase.static-analysis.analysis}
+
+      ### 3. Schema & Migrations
+      ${phase.schema-migration-check.analysis}
+
+      ### 4. Retrieval & RAG Quality
+      ${phase.retrieval-pipeline-check.analysis}
+
+      ### 5. Temporal Workflows & Robustness
+      ${phase.temporal-workflow-review.analysis}
+
+      ### Test Results
+      **Parsing**: ${phase.parsing-quality-check.test_results}
+      **Retrieval**: ${phase.retrieval-pipeline-check.test_results}

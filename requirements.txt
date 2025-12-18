@@ -1,0 +1,2 @@
+# Install package with all dependencies
+-e .
