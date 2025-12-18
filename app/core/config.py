@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     APP_ENV: str = "dev"
     MAX_FILE_SIZE_MB: int = 25
 
+    # PDF Parsing
+    PDF_MAX_FILE_SIZE_MB: int = 25
+    PDF_MAX_PAGES: int = 100
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
 
