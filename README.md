@@ -92,30 +92,32 @@ curl "http://localhost:8000/api/extractions?page=1&page_size=10"
 
 ## Makefile Commands
 
-| Command | Description |
-|---------|-------------|
-| `make install` | Install package locally (pip install -e .) |
-| `make lint` | Run ruff linter |
-| `make test` | Run tests |
-| `make cov` | Run tests with coverage report |
-| `make clean` | Remove cache files and coverage |
-| `make up` | Start Docker services |
-| `make down` | Stop Docker services |
-| `make ps` | Show running containers |
-| `make logs` | Follow all logs |
-| `make logs-api` | Follow API logs only |
-| `make restart` | Restart all services |
-| `make healthcheck` | Check all services health |
+| Command              | Description                                |
+| -------------------- | ------------------------------------------ |
+| `make install`     | Install package locally (pip install -e .) |
+| `make lint`        | Run ruff linter                            |
+| `make test`        | Run tests                                  |
+| `make cov`         | Run tests with coverage report             |
+| `make clean`       | Remove cache files and coverage            |
+| `make up`          | Start Docker services                      |
+| `make down`        | Stop Docker services                       |
+| `make ps`          | Show running containers                    |
+| `make logs`        | Follow all logs                            |
+| `make logs-api`    | Follow API logs only                       |
+| `make restart`     | Restart all services                       |
+| `make healthcheck` | Check all services health                  |
+| `make demo`        | Run E2E demo (tests all endpoints)         |
+| `make demo-json`   | Run E2E demo with raw JSON output          |
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/extract` | Upload PDF, start extraction |
-| `GET` | `/api/extractions/{document_id}` | Get extraction results |
-| `GET` | `/api/extractions` | List all extractions (paginated) |
-| `GET` | `/health` | Liveness probe |
-| `GET` | `/health/ready` | Readiness probe (checks DB, MinIO, Temporal) |
+| Method   | Endpoint                           | Description                                  |
+| -------- | ---------------------------------- | -------------------------------------------- |
+| `POST` | `/api/extract`                   | Upload PDF, start extraction                 |
+| `GET`  | `/api/extractions/{document_id}` | Get extraction results                       |
+| `GET`  | `/api/extractions`               | List all extractions (paginated)             |
+| `GET`  | `/health`                        | Liveness probe                               |
+| `GET`  | `/health/ready`                  | Readiness probe (checks DB, MinIO, Temporal) |
 
 ### POST /api/extract
 
@@ -141,7 +143,7 @@ curl -X POST -F "file=@contract.pdf" http://localhost:8000/api/extract
 - `413` - File exceeds 25MB limit
 - `503` - Extraction service unavailable
 
-### GET /api/extractions/{document_id}
+### GET /api/extractions/
 
 **Response (200):**
 
@@ -302,14 +304,13 @@ charmelio/
 ### API Behavior
 
 - **GET /api/extractions/{document_id}** returns the **latest** extraction for that document (`ORDER BY created_at DESC LIMIT 1`). Multiple extractions can exist per document (re-extraction, model comparison).
-
 - **Pagination** on list endpoint uses offset-based pagination with `page` (default: 1) and `page_size` (default: 10, max: 100).
 
 ### Storage Artifacts
 
-| Bucket | Key Pattern | Content |
-|--------|-------------|---------|
-| `uploads` | `{document_id}.pdf` | Original PDF |
+| Bucket          | Key Pattern            | Content                |
+| --------------- | ---------------------- | ---------------------- |
+| `uploads`     | `{document_id}.pdf`  | Original PDF           |
 | `extractions` | `{document_id}.json` | Extraction result JSON |
 
 We store object keys in the database, not presigned URLs. URLs are generated on-demand when needed.
@@ -321,32 +322,33 @@ MVP uses **truncation at 200k characters** (no chunking). For very long contract
 ### Raw Text Storage
 
 We store `raw_text` in the `documents` table. This enables:
+
 - Re-extraction with different prompts/models without re-parsing PDF
 - Debugging extraction issues
 - Future: retention policy and encryption at rest recommended for production
 
 ## Design Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| **Temporal for orchestration** | Durable workflows with automatic retries, observability via Web UI, clean separation of concerns. Handles LLM timeouts and rate limits gracefully. |
-| **MinIO for blob storage** | Keeps large PDFs out of the database. S3-compatible API makes migration to AWS easy. |
-| **PostgreSQL for metadata** | Production-ready, ACID compliant, supports concurrent writes. |
-| **Sync Temporal activities** | Activities run in thread pool. Async adds complexity without benefit here. |
-| **OpenAI Structured Outputs** | Guarantees valid JSON matching our schema. No brittle parsing. |
-| **One extraction per LLM call** | Simpler than chunking. Works for contracts up to ~100 pages. |
-| **Separate Document/Extraction tables** | Allows re-extraction, model comparison, audit history. |
-| **Async SQLAlchemy for API** | Non-blocking database calls for FastAPI routes. |
-| **Sync SQLAlchemy for Worker** | Temporal activities are sync, simpler implementation. |
+| Decision                                      | Rationale                                                                                                                                          |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Temporal for orchestration**          | Durable workflows with automatic retries, observability via Web UI, clean separation of concerns. Handles LLM timeouts and rate limits gracefully. |
+| **MinIO for blob storage**              | Keeps large PDFs out of the database. S3-compatible API makes migration to AWS easy.                                                               |
+| **PostgreSQL for metadata**             | Production-ready, ACID compliant, supports concurrent writes.                                                                                      |
+| **Sync Temporal activities**            | Activities run in thread pool. Async adds complexity without benefit here.                                                                         |
+| **OpenAI Structured Outputs**           | Guarantees valid JSON matching our schema. No brittle parsing.                                                                                     |
+| **One extraction per LLM call**         | Simpler than chunking. Works for contracts up to ~100 pages.                                                                                       |
+| **Separate Document/Extraction tables** | Allows re-extraction, model comparison, audit history.                                                                                             |
+| **Async SQLAlchemy for API**            | Non-blocking database calls for FastAPI routes.                                                                                                    |
+| **Sync SQLAlchemy for Worker**          | Temporal activities are sync, simpler implementation.                                                                                              |
 
 ## Tradeoffs
 
-| Constraint | Impact | Future Solution |
-|------------|--------|-----------------|
-| No OCR | Scanned PDFs return empty text | Add Tesseract/OCRmyPDF activity |
-| No auth | Anyone can upload | Add API key or OAuth |
-| 200k char truncation | Very long contracts partially processed | Semantic chunking + merge |
-| No webhooks | Clients must poll for results | Add webhook on completion |
+| Constraint           | Impact                                  | Future Solution                 |
+| -------------------- | --------------------------------------- | ------------------------------- |
+| No OCR               | Scanned PDFs return empty text          | Add Tesseract/OCRmyPDF activity |
+| No auth              | Anyone can upload                       | Add API key or OAuth            |
+| 200k char truncation | Very long contracts partially processed | Semantic chunking + merge       |
+| No webhooks          | Clients must poll for results           | Add webhook on completion       |
 
 ## Design Dilemmas
 
@@ -354,38 +356,38 @@ These are common discussion points when evaluating the architecture:
 
 ### Chat Completions vs Responses API
 
-| Option | Notes |
-|--------|-------|
-| **Completions** (current) | Works with `response_format.json_schema`, well-documented |
-| **Responses** | OpenAI's recommended modern API, supports `store=False`, multi-modal extensibility |
+| Option                          | Notes                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| **Completions** (current) | Works with `response_format.json_schema`, well-documented                          |
+| **Responses**             | OpenAI's recommended modern API, supports `store=False`, multi-modal extensibility |
 
 **Decision:** Completions for MVP. Plan migration to Responses API for future features.
 
 ### Async vs Sync Activities
 
-| Option | Notes |
-|--------|-------|
-| **Async** | Consistent with FastAPI patterns, but requires async-compatible libraries |
-| **Sync** (current) | Simpler; worker `ThreadPoolExecutor` handles blocking I/O nicely |
+| Option                   | Notes                                                                     |
+| ------------------------ | ------------------------------------------------------------------------- |
+| **Async**          | Consistent with FastAPI patterns, but requires async-compatible libraries |
+| **Sync** (current) | Simpler; worker `ThreadPoolExecutor` handles blocking I/O nicely        |
 
 **Decision:** Sync activities. pdfplumber and MinIO SDK are sync libraries; wrapping in async adds complexity without benefit.
 
 ### Truncation vs Chunking
 
-| Option | Notes |
-|--------|-------|
+| Option                         | Notes                                                |
+| ------------------------------ | ---------------------------------------------------- |
 | **Truncation** (current) | Fast to ship; risk missing clauses near document end |
-| **Chunking** | Higher recall, more complexity (split/merge/dedupe) |
+| **Chunking**             | Higher recall, more complexity (split/merge/dedupe)  |
 
 **Decision:** Truncation for MVP. Add semantic chunking if documents regularly exceed 200k chars.
 
 ### PDF Safety
 
-| Risk | Mitigation |
-|------|------------|
-| Malformed PDFs crash parsers | Catch exceptions, mark document as `failed` |
-| Malicious PDFs | Future: add qpdf sanitization, ClamAV scanning |
-| Resource exhaustion | Page limit (500), file size limit (25MB) |
+| Risk                         | Mitigation                                     |
+| ---------------------------- | ---------------------------------------------- |
+| Malformed PDFs crash parsers | Catch exceptions, mark document as `failed`  |
+| Malicious PDFs               | Future: add qpdf sanitization, ClamAV scanning |
+| Resource exhaustion          | Page limit (500), file size limit (25MB)       |
 
 **Decision:** MVP catches and marks failures. Add sanitizer for production deployment.
 
@@ -407,30 +409,30 @@ open htmlcov/index.html
 
 ## Service URLs
 
-| Service | URL | Purpose |
-|---------|-----|---------|
-| FastAPI | http://localhost:8000 | Main API |
-| API Docs | http://localhost:8000/docs | Swagger UI |
-| Temporal Web | http://localhost:8233 | Workflow visibility |
-| MinIO Console | http://localhost:9001 | Storage browser |
-| PostgreSQL | localhost:5442 | Database |
+| Service       | URL                        | Purpose             |
+| ------------- | -------------------------- | ------------------- |
+| FastAPI       | http://localhost:8000      | Main API            |
+| API Docs      | http://localhost:8000/docs | Swagger UI          |
+| Temporal Web  | http://localhost:8233      | Workflow visibility |
+| MinIO Console | http://localhost:9001      | Storage browser     |
+| PostgreSQL    | localhost:5442             | Database            |
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | (required) | OpenAI API key |
-| `MODEL_NAME` | `gpt-4o-mini` | Model for extraction |
-| `MAX_FILE_SIZE_MB` | `25` | Upload size limit |
-| `DATABASE_URL` | `postgresql://...` | Database connection |
-| `S3_ENDPOINT` | `http://minio:9000` | MinIO address |
-| `S3_ACCESS_KEY` | `minioadmin` | MinIO access key |
-| `S3_SECRET_KEY` | `minioadmin` | MinIO secret key |
-| `S3_BUCKET_UPLOADS` | `uploads` | Upload bucket |
-| `S3_BUCKET_EXTRACTIONS` | `extractions` | Results bucket |
-| `TEMPORAL_ADDRESS` | `temporal:7233` | Temporal server |
-| `TEMPORAL_NAMESPACE` | `default` | Temporal namespace |
-| `WORKER_TASK_QUEUE` | `extraction-queue` | Task queue name |
+| Variable                  | Default               | Description          |
+| ------------------------- | --------------------- | -------------------- |
+| `OPENAI_API_KEY`        | (required)            | OpenAI API key       |
+| `MODEL_NAME`            | `gpt-4o-mini`       | Model for extraction |
+| `MAX_FILE_SIZE_MB`      | `25`                | Upload size limit    |
+| `DATABASE_URL`          | `postgresql://...`  | Database connection  |
+| `S3_ENDPOINT`           | `http://minio:9000` | MinIO address        |
+| `S3_ACCESS_KEY`         | `minioadmin`        | MinIO access key     |
+| `S3_SECRET_KEY`         | `minioadmin`        | MinIO secret key     |
+| `S3_BUCKET_UPLOADS`     | `uploads`           | Upload bucket        |
+| `S3_BUCKET_EXTRACTIONS` | `extractions`       | Results bucket       |
+| `TEMPORAL_ADDRESS`      | `temporal:7233`     | Temporal server      |
+| `TEMPORAL_NAMESPACE`    | `default`           | Temporal namespace   |
+| `WORKER_TASK_QUEUE`     | `extraction-queue`  | Task queue name      |
 
 ## Demo
 
@@ -457,13 +459,13 @@ curl -s http://localhost:8000/api/extractions/$DOC_ID | jq '.extraction_result.c
 
 ## Troubleshooting
 
-| Symptom | Cause | Solution |
-|---------|-------|----------|
-| `503` on POST /api/extract | Temporal not connected | Check `docker compose logs temporal` and `/health/ready` |
-| Extraction stuck on "pending" | Worker not running or crashed | Check `docker compose logs worker` |
-| Empty extraction result | PDF is scanned (image-only) | OCR not implemented (see Tradeoffs) |
-| "No extraction found" | Processing still in progress | Wait and retry; check Temporal UI at :8233 |
-| "File exceeds limit" | PDF > 25MB | Reduce file size or increase `MAX_FILE_SIZE_MB` |
+| Symptom                       | Cause                         | Solution                                                     |
+| ----------------------------- | ----------------------------- | ------------------------------------------------------------ |
+| `503` on POST /api/extract  | Temporal not connected        | Check `docker compose logs temporal` and `/health/ready` |
+| Extraction stuck on "pending" | Worker not running or crashed | Check `docker compose logs worker`                         |
+| Empty extraction result       | PDF is scanned (image-only)   | OCR not implemented (see Tradeoffs)                          |
+| "No extraction found"         | Processing still in progress  | Wait and retry; check Temporal UI at :8233                   |
+| "File exceeds limit"          | PDF > 25MB                    | Reduce file size or increase `MAX_FILE_SIZE_MB`            |
 
 ## License
 
