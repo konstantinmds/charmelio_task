@@ -106,6 +106,8 @@ curl "http://localhost:8000/api/extractions?page=1&page_size=10"
 | `make logs-api` | Follow API logs only |
 | `make restart` | Restart all services |
 | `make healthcheck` | Check all services health |
+| `make demo` | Run E2E demo (tests all endpoints) |
+| `make demo-json` | Run E2E demo with raw JSON output |
 
 ## API Endpoints
 
