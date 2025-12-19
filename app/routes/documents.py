@@ -23,7 +23,7 @@ async def extract(
     file: UploadFile,
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload a PDF for clause extraction."""
+    """Upload a PDF for clause extraction. No time for docx now"""
     # Validate content type
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF files supported")
