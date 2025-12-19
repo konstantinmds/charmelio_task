@@ -53,3 +53,10 @@ docker-compose.yml
 
 # macOS
 .DS_Store
+
+# Scripts (except entrypoint)
+scripts/e2e_demo.py
+
+# Claude/Agent
+.claude
+.agent

@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db import Base, get_db
+from app.db import Base, get_sync_db
 from app.db.models import Document, DocumentStatus, Extraction
 
 
@@ -244,14 +244,14 @@ def test_cascade_delete(test_db):
 
 
 def test_get_db_context_manager_success(test_db):
-    """Test get_db context manager with successful transaction."""
-    # Temporarily override SessionLocal for testing
+    """Test get_sync_db context manager with successful transaction."""
+    # Temporarily override SyncSessionLocal for testing
     from app.db import session
-    original_session_local = session.SessionLocal
-    session.SessionLocal = test_db
+    original_session_local = session.SyncSessionLocal
+    session.SyncSessionLocal = test_db
 
     try:
-        with get_db() as db:
+        with get_sync_db() as db:
             doc = Document(
                 filename="context.pdf",
                 content_type="application/pdf",
@@ -263,25 +263,25 @@ def test_get_db_context_manager_success(test_db):
         # Transaction should be committed
 
         # Verify document was committed
-        session = test_db()
+        verify_session = test_db()
         try:
-            retrieved = session.query(Document).filter_by(filename="context.pdf").first()
+            retrieved = verify_session.query(Document).filter_by(filename="context.pdf").first()
             assert retrieved is not None
         finally:
-            session.close()
+            verify_session.close()
     finally:
-        session.SessionLocal = original_session_local
+        session.SyncSessionLocal = original_session_local
 
 
 def test_get_db_context_manager_rollback(test_db):
-    """Test get_db context manager rolls back on exception."""
+    """Test get_sync_db context manager rolls back on exception."""
     from app.db import session
-    original_session_local = session.SessionLocal
-    session.SessionLocal = test_db
+    original_session_local = session.SyncSessionLocal
+    session.SyncSessionLocal = test_db
 
     try:
         with pytest.raises(ValueError):
-            with get_db() as db:
+            with get_sync_db() as db:
                 doc = Document(
                     filename="rollback.pdf",
                     content_type="application/pdf",
@@ -294,14 +294,14 @@ def test_get_db_context_manager_rollback(test_db):
                 raise ValueError("Test rollback")
 
         # Verify document was NOT committed
-        session = test_db()
+        verify_session = test_db()
         try:
-            retrieved = session.query(Document).filter_by(filename="rollback.pdf").first()
+            retrieved = verify_session.query(Document).filter_by(filename="rollback.pdf").first()
             assert retrieved is None
         finally:
-            session.close()
+            verify_session.close()
     finally:
-        session.SessionLocal = original_session_local
+        session.SyncSessionLocal = original_session_local
 
 
 def test_extraction_metadata_jsonb(test_db):

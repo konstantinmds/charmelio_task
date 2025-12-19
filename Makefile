@@ -1,7 +1,7 @@
 COMPOSE ?= docker compose
 ENV_FILE ?= .env
 
-.PHONY: install lint test cov clean up down ps logs restart healthcheck
+.PHONY: install lint test cov clean up down ps logs restart healthcheck demo demo-json
 
 # Local development
 install:
@@ -47,3 +47,10 @@ healthcheck:
 	@curl -fsS http://localhost:8233/ >/dev/null && echo "temporal-ui: OK" || echo "temporal-ui: FAIL"
 	@curl -fsS http://localhost:8000/health >/dev/null && echo "api: OK" || echo "api: FAIL"
 	@echo "Done."
+
+# E2E demo
+demo:
+	python scripts/e2e_demo.py
+
+demo-json:
+	python scripts/e2e_demo.py --json

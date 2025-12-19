@@ -15,9 +15,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-url = config.attributes.get("database_url_override") or config.get_main_option("sqlalchemy.url")
-if not url:
-    url = settings.DATABASE_URL
+# Prefer DATABASE_URL from environment over alembic.ini
+url = settings.DATABASE_URL or config.get_main_option("sqlalchemy.url")
 config.set_main_option("sqlalchemy.url", url)
 target_metadata = Base.metadata
 

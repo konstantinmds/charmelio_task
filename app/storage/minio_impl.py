@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from typing import Mapping
 
 from minio import Minio
@@ -33,11 +34,11 @@ class MinioStorage(ObjectStorage, Presigner):
         metadata: Mapping[str, str] | None = None,
     ) -> str:
         try:
-            # MinIO requires a length; bytes object provides len directly.
+            # MinIO requires a file-like object with read() method
             self._client.put_object(
                 bucket_name=bucket,
                 object_name=key,
-                data=bytes(data),
+                data=io.BytesIO(data),
                 length=len(data),
                 content_type=content_type,
                 metadata=dict(metadata) if metadata else None,

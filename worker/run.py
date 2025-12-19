@@ -1,16 +1,18 @@
 """Temporal Worker entry point.
 
 This worker polls the extraction-queue for workflow and activity tasks.
-Actual workflows and activities will be implemented in T-07 and T-08.
 """
 import asyncio
 import logging
 import signal
+from concurrent.futures import ThreadPoolExecutor
 
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from worker.activities import llm_extract, parse_pdf, store_results
 from worker.config import WorkerSettings
+from worker.workflows import ExtractionWorkflow
 
 # Configure logging
 logging.basicConfig(
@@ -46,13 +48,16 @@ async def run_worker() -> None:
         namespace=settings.TEMPORAL_NAMESPACE
     )
 
-    # Create worker (no workflows/activities yet - will be added in T-07/T-08)
-    # For now, just ensure the worker starts and connects successfully
+    # Create thread pool for sync activities
+    activity_executor = ThreadPoolExecutor(max_workers=4)
+
+    # Create worker with workflows and activities
     worker = Worker(
         client,
         task_queue=settings.WORKER_TASK_QUEUE,
-        workflows=[],  # Will add ExtractionWorkflow in T-08
-        activities=[]  # Will add activities in T-07
+        workflows=[ExtractionWorkflow],
+        activities=[parse_pdf, llm_extract, store_results],
+        activity_executor=activity_executor,
     )
 
     # Setup graceful shutdown
@@ -67,9 +72,10 @@ async def run_worker() -> None:
     await stop_event.wait()
     logger.info("Shutdown signal received, stopping worker...")
 
-    # Cancel worker task
+    # Cancel worker task and shutdown executor
     worker_task.cancel()
     await asyncio.gather(worker_task, return_exceptions=True)
+    activity_executor.shutdown(wait=True)
     logger.info("Worker stopped")
 
 

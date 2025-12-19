@@ -29,7 +29,7 @@ def test_put_bytes_happy_path():
     kwargs = client.put_object.call_args.kwargs
     assert kwargs["bucket_name"] == "uploads"
     assert kwargs["object_name"] == "doc.pdf"
-    assert kwargs["data"] == b"data"
+    assert kwargs["data"].read() == b"data"  # BytesIO object
     assert kwargs["length"] == 4
     assert kwargs["content_type"] == "application/pdf"
     assert kwargs["metadata"] == {"a": "b"}
