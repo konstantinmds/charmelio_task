@@ -29,12 +29,12 @@ class Document(Base):
     page_count: Mapped[Optional[int]] = mapped_column(Integer)
     raw_text: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[DocumentStatus] = mapped_column(
-        SAEnum(DocumentStatus), nullable=False, default=DocumentStatus.pending
+        SAEnum(DocumentStatus, name="document_status"), nullable=False, default=DocumentStatus.pending
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text)
 
     bucket: Mapped[str] = mapped_column(String(63), nullable=False, default="uploads")
-    object_key: Mapped[str] = mapped_column(String(512), nullable=False)  # e.g., "uploads/<uuid>.pdf"
+    object_key: Mapped[str] = mapped_column(String(512), nullable=False)  # key within bucket, e.g., "<uuid>.pdf"
 
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -45,8 +45,16 @@ class Document(Base):
         "Extraction",
         back_populates="document",
         cascade="all, delete-orphan",
-        order_by="Extraction.created_at",
+        order_by="Extraction.created_at.desc()",
     )
+
+    @property
+    def latest_extraction(self) -> Optional["Extraction"]:
+        """Most recent extraction, or None."""
+        return self.extractions[0] if self.extractions else None
+
+    def __repr__(self) -> str:
+        return f"<Document {self.id[:8]} {self.filename} [{self.status.value}]>"
 
 
 class Extraction(Base):
@@ -61,7 +69,7 @@ class Extraction(Base):
     confidence: Mapped[Optional[float]] = mapped_column(Float)
 
     artifact_bucket: Mapped[str] = mapped_column(String(63), nullable=False, default="extractions")
-    artifact_key: Mapped[str] = mapped_column(String(512), nullable=False)  # e.g., "extractions/<uuid>.json"
+    artifact_key: Mapped[str] = mapped_column(String(512), nullable=False)  # key within bucket, e.g., "<uuid>.json"
 
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
@@ -70,3 +78,6 @@ class Extraction(Base):
     __table_args__ = (
         Index("idx_extractions_document_created", "document_id", "created_at"),
     )
+
+    def __repr__(self) -> str:
+        return f"<Extraction {self.id[:8]} doc={self.document_id[:8]} model={self.model_used}>"

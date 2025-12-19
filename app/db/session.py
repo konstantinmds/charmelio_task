@@ -1,57 +1,63 @@
-"""Database configuration and session management (sync + async)."""
+"""Database session management."""
 
-from __future__ import annotations
-
-from contextlib import contextmanager, asynccontextmanager
-from typing import AsyncGenerator, Generator
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
-
-try:  # optional async deps
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-except ImportError:  # pragma: no cover - only when async extras missing
-    AsyncSession = None
-    async_sessionmaker = None
-    create_async_engine = None
 
 from app.core.config import settings
 
 
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy models."""
-
     pass
 
 
-def _build_async_url(url: str) -> str:
-    """Convert sync Postgres URL to asyncpg URL if needed."""
-    prefix = "postgresql://"
-    async_prefix = "postgresql+asyncpg://"
-    if url.startswith(async_prefix):
-        return url
-    if url.startswith(prefix):
-        return async_prefix + url[len(prefix) :]
+def _to_async_url(url: str) -> str:
+    """Convert sync DB URL to async URL."""
+    if url.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + url[13:]
+    if url.startswith("sqlite://"):
+        return "sqlite+aiosqlite://" + url[9:]
     return url
 
 
-# Sync engine/session (FastAPI routes, scripts)
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+def _to_sync_url(url: str) -> str:
+    """Convert async DB URL to sync URL."""
+    if url.startswith("sqlite+aiosqlite://"):
+        return "sqlite://" + url[19:]
+    if url.startswith("postgresql+asyncpg://"):
+        return "postgresql://" + url[21:]
+    return url
 
-# Async engine/session (background tasks needing async pooling)
-if create_async_engine and async_sessionmaker and AsyncSession:
-    async_engine = create_async_engine(_build_async_url(settings.DATABASE_URL), pool_pre_ping=True)
-    AsyncSessionLocal = async_sessionmaker(bind=async_engine, expire_on_commit=False, autoflush=False, autocommit=False)
-else:  # pragma: no cover - async extras not installed
-    async_engine = None
-    AsyncSessionLocal = None
+
+# Async engine/session (FastAPI)
+async_engine = create_async_engine(_to_async_url(settings.DATABASE_URL), pool_pre_ping=True)
+AsyncSessionLocal = async_sessionmaker(async_engine, expire_on_commit=False)
+
+
+async def get_db() -> AsyncSession:
+    """Async DB session for FastAPI routes."""
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+async def init_db() -> None:
+    """Create all database tables."""
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+# Sync engine/session (Temporal worker activities)
+sync_engine = create_engine(_to_sync_url(settings.DATABASE_URL), pool_pre_ping=True)
+SyncSessionLocal = sessionmaker(sync_engine, autocommit=False, autoflush=False)
 
 
 @contextmanager
-def get_db() -> Generator[Session, None, None]:
-    """Context manager: commit on success, rollback on exception, always close."""
-    db = SessionLocal()
+def get_sync_db():
+    """Sync DB session for worker activities."""
+    db = SyncSessionLocal()
     try:
         yield db
         db.commit()
@@ -60,42 +66,3 @@ def get_db() -> Generator[Session, None, None]:
         raise
     finally:
         db.close()
-
-
-def get_db_dependency() -> Generator[Session, None, None]:
-    """FastAPI dependency: yield session, ensure close (no auto-commit)."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-@asynccontextmanager
-async def get_async_db() -> AsyncGenerator[AsyncSession, None]:  # pragma: no cover
-    """Async context manager: commit on success, rollback on exception, always close."""
-    if AsyncSessionLocal is None:
-        raise RuntimeError("Async session not available; install async extras.")
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-async def get_async_db_dependency() -> AsyncGenerator[AsyncSession, None]:  # pragma: no cover
-    """FastAPI async dependency: yield session, ensure close (no auto-commit)."""
-    if AsyncSessionLocal is None:
-        raise RuntimeError("Async session not available; install async extras.")
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
-
-
-def init_db() -> None:
-    """Create all database tables (sync metadata)."""
-    Base.metadata.create_all(bind=engine)

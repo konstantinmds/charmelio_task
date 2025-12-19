@@ -1,5 +1,23 @@
 """Database package."""
 
-from app.db.session import Base, SessionLocal, get_db, init_db
+from app.db.session import (
+    AsyncSessionLocal,
+    Base,
+    SyncSessionLocal,
+    async_engine,
+    get_db,
+    get_sync_db,
+    init_db,
+    sync_engine,
+)
 
-__all__ = ["Base", "SessionLocal", "get_db", "init_db"]
+__all__ = [
+    "AsyncSessionLocal",
+    "Base",
+    "SyncSessionLocal",
+    "async_engine",
+    "get_db",
+    "get_sync_db",
+    "init_db",
+    "sync_engine",
+]

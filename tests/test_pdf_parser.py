@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.pdf_parser import (
+from app.services import (
     PDFError,
     PDFParseError,
     PDFValidationError,
@@ -181,7 +181,7 @@ class TestEdgeCases:
         mock_pdf.__enter__ = MagicMock(return_value=mock_pdf)
         mock_pdf.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.pdf_parser.pdfplumber.open", return_value=mock_pdf):
+        with patch("app.services.pdf_parser.pdfplumber.open", return_value=mock_pdf):
             with pytest.raises(PDFValidationError, match="no text content"):
                 extract_text_and_pages(b"%PDF-1.4 valid header")
 
